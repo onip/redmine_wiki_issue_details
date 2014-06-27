@@ -1,26 +1,5 @@
 require 'redmine'
 
-# Redmine 0.8.x patches
-module RedmineWikiIssueDetails
-  module IssueCompatibilityPatch
-    def self.included(base)
-      base.class_eval do
-        named_scope :visible, lambda {|*args| { :include => :project,
-            :conditions => Project.allowed_to_condition(args.first || User.current, :view_issues) } }
-      end
-    end
-  end
-end
-
-# Patches to the Redmine core.
-require 'dispatcher'
-
-Dispatcher.to_prepare :redmine_wiki_issue_details do
-  require_dependency 'issue'
-  Issue.send(:include, RedmineWikiIssueDetails::IssueCompatibilityPatch) unless Issue.respond_to? :visible
-end
-
-
 Redmine::Plugin.register :redmine_wiki_issue_details do
   name 'Redmine Wiki Issue Details plugin'
   author 'Eric Davis'
@@ -28,7 +7,7 @@ Redmine::Plugin.register :redmine_wiki_issue_details do
   author_url 'http://www.littlestreamsoftware.com'
   description 'This plugin adds a wiki macro to make it easier to list the details of issues on a wiki page.'
   version '0.1.0'
-  requires_redmine :version_or_higher => '0.8.0'
+  requires_redmine :version_or_higher => '2.1.0'
 
 
   Redmine::WikiFormatting::Macros.register do
@@ -46,22 +25,18 @@ Redmine::Plugin.register :redmine_wiki_issue_details do
         # is allowed to view the estimate
         estimates = ''
       elsif issue.estimated_hours && issue.estimated_hours > 0
-        estimates = "- #{l_hours(issue.estimated_hours)}"
+        estimates = "[<b>#{l_hours(issue.estimated_hours)}</b>]"
       else
         estimates = "- <strong>#{l(:redmine_wiki_issue_details_text_needs_estimate)}</strong>"
       end
 
-      project_link = link_to(h(issue.project), :controller => 'projects', :action => 'show', :id => issue.project)
-        
-      returning '' do |response|
-        response << '<span style="text-decoration: line-through;">' if issue.closed?
-        response << project_link
-        response << ' - '
-        response << link_to_issue(issue) + ' '
-        response << estimates + ' '
-        response << "(#{h(issue.status)})"
-        response << '</span>' if issue.closed?
-      end
+      open_tag = issue.closed? ? '<span style="text-decoration: line-through;">' : ''
+      close_tag = issue.closed? ? '</span>' : ''
+
+      content = open_tag + link_to_issue(issue) + ' ' +
+        estimates + ' ' + "(#{h(issue.status)}, #{issue.done_ratio}%)" + close_tag
+
+      content.html_safe
     end
   end
 end
